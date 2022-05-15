@@ -113,6 +113,8 @@ class Joiner(nn.Sequential):
             out.append(x)
             # position encoding
             pos.append(self[1](x).to(x.tensors.dtype))
+            pos.append(self[2](x).to(x.tensors.dtype))
+            
 
         return out, pos
 

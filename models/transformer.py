@@ -429,6 +429,7 @@ def build_transformer(args):
         num_decoder_layers=args.dec_layers,
         normalize_before=args.pre_norm,
         return_intermediate_dec=True,
+        interp_h_w=args.interp_h_w
     )
 
 
