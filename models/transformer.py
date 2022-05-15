@@ -47,16 +47,18 @@ def gen_sineembed_for_position(pos_tensor):
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=512, nhead=8, num_queries=300, num_encoder_layers=6,
+    def __init__(self, d_model=512, nhead=8, num_queries=100, num_encoder_layers=6,
                  num_decoder_layers=6, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False,
-                 return_intermediate_dec=False):
+                 return_intermediate_dec=False, interp_h_w=24):
         super().__init__()
-
-        encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
+        encoder_height_layer = TransformerEncoderLayer(d_model*interp_h_w, nhead, dim_feedforward,
+                                                dropout, activation, normalize_before)
+        encoder_width_layer = TransformerEncoderLayer(d_model*interp_h_w, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before)
         encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
-        self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
+        self.encoder_height = TransformerEncoder(encoder_height_layer, num_encoder_layers, encoder_norm)
+        self.encoder_width = TransformerEncoder(encoder_width_layer, num_encoder_layers, encoder_norm)
 
         decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before)
@@ -64,7 +66,7 @@ class Transformer(nn.Module):
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm,
                                           return_intermediate=return_intermediate_dec,
                                           d_model=d_model)
-
+        self.interp_h_w = interp_h_w
         self._reset_parameters()
 
         self.d_model = d_model
@@ -78,14 +80,33 @@ class Transformer(nn.Module):
 
     def forward(self, src, mask, query_embed, pos_embed):
         # flatten NxCxHxW to HWxNxC
+        # (h, w) varies across batches
+        src = F.interpolate(src, size=(self.interp_h_w, self.interp_h_w), mode="bilinear")
+
         bs, c, h, w = src.shape
-        src = src.flatten(2).permute(2, 0, 1)
+        # src = src.flatten(2).permute(2, 0, 1)
+        # query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+        # mask = mask.flatten(1)
+        # (H, bs, d*W)
+
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+
+        # (H, N, d*W)
+        src_height = src.permute(2, 0, 1, 3).flatten(2)
+        pos_embed_height = pos_embed[0]
+
+        src_width = src.permute(3, 0, 1, 2).flatten(2)
+        pos_embed_width = pos_embed[1]
+
         mask = mask.flatten(1)
 
+        query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+
         tgt = torch.zeros_like(query_embed)
-        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
+        memory_height = self.encoder_height(src_height, src_key_padding_mask=mask, pos=pos_embed_height)
+        memory_width = self.encoder_width(src_width, src_key_padding_mask=mask, pos=pos_embed_width)
+        # Decoder attends to everything --> Concatenate memories along 0th dimension, needed to make sure embeddings were same dimensions in both cases
+        memory = torch.cat([memory_height, memory_width], dim=0)
         hs, references = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, query_pos=query_embed)
         return hs, references
@@ -220,6 +241,7 @@ class TransformerEncoderLayer(nn.Module):
         q = k = self.with_pos_embed(src2, pos)
         src2 = self.self_attn(q, k, value=src2, attn_mask=src_mask,
                               key_padding_mask=src_key_padding_mask)[0]
+        # SN: Add and norm
         src = src + self.dropout1(src2)
         src2 = self.norm2(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src2))))

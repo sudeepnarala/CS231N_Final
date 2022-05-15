@@ -46,7 +46,7 @@ def get_args_parser():
                         help="If true, we replace stride with dilation in the last convolutional block (DC5)")
     parser.add_argument('--position_embedding', default='sine', type=str, choices=('sine', 'learned'),
                         help="Type of positional embedding to use on top of the image features")
-
+    parser.add_argument("--interp_h_w", default=24, type=int, help="Spatial dimension to interpolate to")
     # * Transformer
     parser.add_argument('--enc_layers', default=6, type=int,
                         help="Number of encoding layers in the transformer")
@@ -60,7 +60,7 @@ def get_args_parser():
                         help="Dropout applied in the transformer")
     parser.add_argument('--nheads', default=8, type=int,
                         help="Number of attention heads inside the transformer's attentions")
-    parser.add_argument('--num_queries', default=300, type=int,
+    parser.add_argument('--num_queries', default=100, type=int,
                         help="Number of query slots")
     parser.add_argument('--pre_norm', action='store_true')
 
