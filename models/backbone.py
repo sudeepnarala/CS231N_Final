@@ -83,6 +83,7 @@ class BackboneBase(nn.Module):
         for name, x in xs.items():
             m = tensor_list.mask
             assert m is not None
+            import pdb; pdb.set_trace()
             mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
             out[name] = NestedTensor(x, mask)
         return out
@@ -112,8 +113,8 @@ class Joiner(nn.Sequential):
         for name, x in xs.items():
             out.append(x)
             # position encoding
-            pos.append(self[1](x).to(x.tensors.dtype))
-            pos.append(self[2](x).to(x.tensors.dtype))
+            pos.append(self[1][0](x).to(x.tensors.dtype))
+            pos.append(self[1][1](x).to(x.tensors.dtype))
             
 
         return out, pos

@@ -56,16 +56,16 @@ class Transformer(nn.Module):
                                                 dropout, activation, normalize_before)
         encoder_width_layer = TransformerEncoderLayer(d_model*interp_h_w, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before)
-        encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
+        encoder_norm = nn.LayerNorm(d_model*interp_h_w) if normalize_before else None
         self.encoder_height = TransformerEncoder(encoder_height_layer, num_encoder_layers, encoder_norm)
         self.encoder_width = TransformerEncoder(encoder_width_layer, num_encoder_layers, encoder_norm)
 
-        decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
+        decoder_layer = TransformerDecoderLayer(d_model*interp_h_w, nhead, dim_feedforward,
                                                 dropout, activation, normalize_before)
-        decoder_norm = nn.LayerNorm(d_model)
+        decoder_norm = nn.LayerNorm(d_model*interp_h_w)
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm,
                                           return_intermediate=return_intermediate_dec,
-                                          d_model=d_model)
+                                          d_model=d_model*interp_h_w)
         self.interp_h_w = interp_h_w
         self._reset_parameters()
 
@@ -94,11 +94,12 @@ class Transformer(nn.Module):
         # (H, N, d*W)
         src_height = src.permute(2, 0, 1, 3).flatten(2)
         pos_embed_height = pos_embed[0]
+        mask = torch.ones((bs, self.interp_h_w)).to(torch.device("cuda"))
 
         src_width = src.permute(3, 0, 1, 2).flatten(2)
         pos_embed_width = pos_embed[1]
 
-        mask = mask.flatten(1)
+        # mask = mask.flatten(1)
 
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
 
